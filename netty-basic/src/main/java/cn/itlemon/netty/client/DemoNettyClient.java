@@ -8,7 +8,6 @@ import org.slf4j.LoggerFactory;
 import cn.hutool.json.JSONUtil;
 import cn.itlemon.netty.handler.DemoClientHandler;
 import cn.itlemon.netty.model.RequestFuture;
-import cn.itlemon.netty.model.Response;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
@@ -21,8 +20,6 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.codec.string.StringDecoder;
 import io.netty.handler.codec.string.StringEncoder;
-import io.netty.util.concurrent.DefaultPromise;
-import io.netty.util.concurrent.Promise;
 
 /**
  * @author itlemon <lemon_jiang@aliyun.com>
@@ -34,6 +31,7 @@ public class DemoNettyClient {
 
     public static EventLoopGroup group;
     public static Bootstrap bootstrap;
+    public static ChannelFuture future;
 
     static {
         // 客户端启动辅助类
@@ -45,40 +43,48 @@ public class DemoNettyClient {
         bootstrap.group(group);
         // 设置内存分配器
         bootstrap.option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
+        final DemoClientHandler clientHandler = new DemoClientHandler();
+        // 把Handler对象加入到管道中
+        bootstrap.handler(new ChannelInitializer<NioSocketChannel>() {
+            @Override
+            protected void initChannel(NioSocketChannel ch) {
+                ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
+                // 将接收到的ByteBuf数据包转换成String
+                ch.pipeline().addLast(new StringDecoder());
+                // 业务逻辑处理Handler
+                ch.pipeline().addLast(clientHandler);
+                ch.pipeline().addLast(new LengthFieldPrepender(4, false));
+                // 将字符串消息转换成ByteBuf
+                ch.pipeline().addLast(new StringEncoder(StandardCharsets.UTF_8));
+            }
+        });
+        // 连接服务器
+        try {
+            future = bootstrap.connect("localhost", 8080).sync();
+        } catch (Exception e) {
+            LOGGER.error("demo netty client get exception.", e);
+        }
     }
 
     public static void main(String[] args) {
+        DemoNettyClient demoNettyClient = new DemoNettyClient();
+        for (int i = 0; i < 100; i++) {
+            LOGGER.info("result: {}", demoNettyClient.sendRequest("hello netty!"));
+        }
+    }
+
+    public Object sendRequest(Object msg) {
         try {
-            // 新建一个promise对象
-            Promise<Response> promise = new DefaultPromise<>(group.next());
-            final DemoClientHandler clientHandler = new DemoClientHandler();
-            clientHandler.setPromise(promise);
-            // 把Handler对象加入到管道中
-            bootstrap.handler(new ChannelInitializer<NioSocketChannel>() {
-                @Override
-                protected void initChannel(NioSocketChannel ch) throws Exception {
-                    ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
-                    // 将接收到的ByteBuf数据包转换成String
-                    ch.pipeline().addLast(new StringDecoder());
-                    // 业务逻辑处理Handler
-                    ch.pipeline().addLast(clientHandler);
-                    ch.pipeline().addLast(new LengthFieldPrepender(4, false));
-                    // 将字符串消息转换成ByteBuf
-                    ch.pipeline().addLast(new StringEncoder(StandardCharsets.UTF_8));
-                }
-            });
-            // 连接服务器
-            ChannelFuture future = bootstrap.connect("localhost", 8080).sync();
-            // 构建请求参数
+            // 构建request
             RequestFuture request = new RequestFuture();
-            request.setId(1);
-            request.setResult("hello netty!");
+            request.setRequest(msg);
+
             future.channel().writeAndFlush(JSONUtil.toJsonStr(request));
-            // 同步阻塞等待响应结果
-            Response response = promise.get();
-            LOGGER.info("response: {}", response);
+            // 同步等待结果
+            return request.get();
         } catch (Exception e) {
-            LOGGER.error("demo netty client get exception.", e);
+            LOGGER.error("send request fail.", e);
+            throw e;
         }
     }
 

@@ -3,6 +3,7 @@ package cn.itlemon.netty.model;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,9 +22,16 @@ public class RequestFuture {
      */
     public static Map<Long, RequestFuture> futures = new ConcurrentHashMap<>();
 
+    private static final AtomicLong A_ID = new AtomicLong(1);
+
     private long id;
     private Object request;
     private Object result;
+
+    public RequestFuture() {
+        this.id = A_ID.incrementAndGet();
+        addFuture(this);
+    }
 
     /**
      * 将请求加入缓存中
@@ -41,7 +49,7 @@ public class RequestFuture {
      */
     public Object get() {
         synchronized (this) {
-            while (request == null) {
+            while (result == null) {
                 try {
                     this.wait(TIMEOUT);
                 } catch (Exception e) {
