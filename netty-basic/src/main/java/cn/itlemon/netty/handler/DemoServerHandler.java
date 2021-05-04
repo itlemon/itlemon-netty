@@ -7,6 +7,7 @@ import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import cn.itlemon.netty.model.RequestFuture;
 import cn.itlemon.netty.model.Response;
+import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 
@@ -14,6 +15,7 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
  * @author itlemon <lemon_jiang@aliyun.com>
  * Created on 2021-04-23
  */
+@Sharable
 public class DemoServerHandler extends ChannelInboundHandlerAdapter {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DemoServerHandler.class);
